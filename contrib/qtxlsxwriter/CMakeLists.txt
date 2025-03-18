@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.5)
 
 project(QtXlsxWriter)
 add_definitions(-DQT_BUILD_XLSX_LIB)
