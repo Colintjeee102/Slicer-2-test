@@ -90,12 +90,12 @@ static GcodeMeta SiemensMeta = {
     GcodeSyntax::kSiemens,
     QString(";"), //starting_delim
     QString(), //ending_delim
-    in, //distance
+    mm, //distance
     s, //time
     degree, //angle
-    lbm, //mass
-    in / minute, //velocity
-    in / s / s, //acceleration
+    kg, //mass
+    mm / minute, //velocity
+    mm / s / s, //acceleration
     rev / minute,  //angular velocity
     ".mpf"
 };
