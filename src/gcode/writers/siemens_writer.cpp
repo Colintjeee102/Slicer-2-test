@@ -24,20 +24,29 @@ namespace ORNL
         QString rv;
         if (m_sb->setting< int >(Constants::PrinterSettings::GCode::kEnableStartupCode))
         {
-            rv += commentLine("SAFETY BLOCK - ESTABLISH OPERATIONAL MODES");
-            rv += "G643" % commentSpaceLine("?");
+            rv += commentLine("START UP");
+            rv += commentLine("G-CODE FOR AM FLEXBOT");
             rv += "G90" % commentSpaceLine("USE ABSOLUTE COORDINATES");
-            rv += "G54" % commentSpaceLine("WORK OFFSET");
+            rv += "G17" % commentSpaceLine("COORDINATE PLANE X/Y");
+            rv += "G55" % commentSpaceLine("WORK OFFSET");
+            rv += "CYCLE832(2,_finish,1)" % commentSpaceLine("ENABLE HIGH SPEED MACHINING CYCLE");
+            rv += "EXTRUDERSPEED2(0,0,1)" % commentSpaceLine("SET THE EXTRUDERSPEED TO 0 RPM");
+            Distance layer_width = m_sb->setting<Distance>(Constants::ProfileSettings::Layer::kBeadWidth);
+            Distance layer_height = m_sb->setting<Distance>(Constants::ProfileSettings::Layer::kLayerHeight);
+
+            rv += "EXTRUDERSPEED2(" % QString::number(layer_width.to(m_meta.m_distance_unit), 'f', 4) % "," %
+                  QString::number(layer_height.to(m_meta.m_distance_unit), 'f', 4) % ",1400)" %
+                  commentSpaceLine("SET THE EXTRUDERSPEED") % m_newline;
         }
 
         if(m_sb->setting< int >(Constants::PrinterSettings::GCode::kEnableBoundingBox))
         {
-            rv += "G0 Z0" % commentSpaceLine("RAISE Z TO DEMO BOUNDING BOX")
-                % m_G0 % m_x % QString::number(minimum_x.to(m_meta.m_distance_unit), 'f', 4) % " Y" % QString::number(minimum_y.to(m_meta.m_distance_unit), 'f', 4) % commentSpaceLine("BOUNDING BOX")
-                % m_G0 % m_x % QString::number(maximum_x.to(m_meta.m_distance_unit), 'f', 4) % " Y" % QString::number(minimum_y.to(m_meta.m_distance_unit), 'f', 4) % commentSpaceLine("BOUNDING BOX")
-                % m_G0 % m_x % QString::number(maximum_x.to(m_meta.m_distance_unit), 'f', 4) % " Y" % QString::number(maximum_y.to(m_meta.m_distance_unit), 'f', 4) % commentSpaceLine("BOUNDING BOX")
-                % m_G0 % m_x % QString::number(minimum_x.to(m_meta.m_distance_unit), 'f', 4) % " Y" % QString::number(maximum_y.to(m_meta.m_distance_unit), 'f', 4) % commentSpaceLine("BOUNDING BOX")
-                % m_G0 % m_x % QString::number(minimum_x.to(m_meta.m_distance_unit), 'f', 4) % " Y" % QString::number(minimum_y.to(m_meta.m_distance_unit), 'f', 4) % commentSpaceLine("BOUNDING BOX")
+            rv += "G1 Z2" % commentSpaceLine("RAISE Z TO DEMO BOUNDING BOX")
+                % m_G1 % m_x % QString::number(minimum_x.to(m_meta.m_distance_unit), 'f', 4) % " Y" % QString::number(minimum_y.to(m_meta.m_distance_unit), 'f', 4) % commentSpaceLine("BOUNDING BOX")
+                % m_G1 % m_x % QString::number(maximum_x.to(m_meta.m_distance_unit), 'f', 4) % " Y" % QString::number(minimum_y.to(m_meta.m_distance_unit), 'f', 4) % commentSpaceLine("BOUNDING BOX")
+                % m_G1 % m_x % QString::number(maximum_x.to(m_meta.m_distance_unit), 'f', 4) % " Y" % QString::number(maximum_y.to(m_meta.m_distance_unit), 'f', 4) % commentSpaceLine("BOUNDING BOX")
+                % m_G1 % m_x % QString::number(minimum_x.to(m_meta.m_distance_unit), 'f', 4) % " Y" % QString::number(maximum_y.to(m_meta.m_distance_unit), 'f', 4) % commentSpaceLine("BOUNDING BOX")
+                % m_G1 % m_x % QString::number(minimum_x.to(m_meta.m_distance_unit), 'f', 4) % " Y" % QString::number(minimum_y.to(m_meta.m_distance_unit), 'f', 4) % commentSpaceLine("BOUNDING BOX")
                 % "M0" % commentSpaceLine("WAIT FOR USER");
 
             m_start_point = Point(minimum_x, minimum_y, 0);
@@ -131,7 +140,7 @@ namespace ORNL
         {
             m_extruders_on[0] = false;
             if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kPerimeterEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kPerimeterEnd) % m_newline;
+                rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kPerimeterEnd) % m_newline;
         }
 
         Point new_start_location;
@@ -161,7 +170,7 @@ namespace ORNL
         if (travel_lift_required && (lType == TravelLiftType::kBoth || lType == TravelLiftType::kLiftUpOnly))
         {
             Point lift_destination = new_start_location + travel_lift; //lift destination is above start location
-            rv += m_G0 % writeCoordinates(lift_destination) % commentSpaceLine("TRAVEL LIFT Z");
+            rv += m_G1 % writeCoordinates(lift_destination) % " EM=0" % commentSpaceLine("TRAVEL LIFT Z");
             setFeedrate(m_sb->setting< Velocity >(Constants::PrinterSettings::MachineSpeed::kZSpeed));
         }
 
@@ -172,14 +181,14 @@ namespace ORNL
             travel_destination = travel_destination + travel_lift; //travel destination is above the target point
         }
 
-        rv += m_G0 % writeCoordinates(travel_destination) % commentSpaceLine("TRAVEL");
+        rv += m_G1 % writeCoordinates(travel_destination) % " EM=0" % commentSpaceLine("TRAVEL");
         setFeedrate(m_sb->setting< Velocity >(Constants::ProfileSettings::Travel::kSpeed));
 
         //write the travel lower (undo the lift)
         if (travel_lift_required && (lType == TravelLiftType::kBoth || lType == TravelLiftType::kLiftLowerOnly))
         {
-            rv += m_G0 % writeCoordinates(target_location) % commentSpaceLine("TRAVEL LOWER Z");
-            setFeedrate(m_sb->setting< Velocity >(Constants::PrinterSettings::MachineSpeed::kZSpeed));
+            rv += m_G1 + writeCoordinates(target_location) % " EM=0" % commentSpaceLine("TRAVEL LOWER Z");
+            setFeedrate(m_sb->setting<Velocity>(Constants::PrinterSettings::MachineSpeed::kZSpeed));
         }
 
         if (m_first_travel) //if this is the first travel
@@ -201,8 +210,8 @@ namespace ORNL
         //Write out the region starting G-Code if this is the first segment of the path
         //First segment of the path is signified by extruder being off and the modifier isn't one of five ending modifiers
         if(m_extruders_on[0] == false && path_modifiers != PathModifiers::kSlowDown && path_modifiers != PathModifiers::kForwardTipWipe
-                && path_modifiers != PathModifiers::kReverseTipWipe && path_modifiers != PathModifiers::kCoasting
-                && path_modifiers != PathModifiers::kSpiralLift)
+            && path_modifiers != PathModifiers::kReverseTipWipe && path_modifiers != PathModifiers::kCoasting
+            && path_modifiers != PathModifiers::kSpiralLift)
         {
             m_extruders_on[0] = true;
             if (region_type == RegionType::kPerimeter)
@@ -239,8 +248,8 @@ namespace ORNL
         //Write out the region ending G-Code if this is the first segment of the ending path modifiers
         //First segment is signified by extruder being on and the modifier is one of five ending modifiers
         else if(m_extruders_on[0] == true && (path_modifiers == PathModifiers::kSlowDown || path_modifiers == PathModifiers::kForwardTipWipe
-                || path_modifiers == PathModifiers::kReverseTipWipe || path_modifiers == PathModifiers::kCoasting
-                || path_modifiers == PathModifiers::kSpiralLift))
+                                               || path_modifiers == PathModifiers::kReverseTipWipe || path_modifiers == PathModifiers::kCoasting
+                                               || path_modifiers == PathModifiers::kSpiralLift))
         {
             m_extruders_on[0] = false;
             if (region_type == RegionType::kPerimeter)
@@ -285,7 +294,14 @@ namespace ORNL
         }
 
         //writes WXYZ to destination
-        rv += writeCoordinates(target_point);
+        if (path_modifiers == PathModifiers::kForwardTipWipe || path_modifiers == PathModifiers::kReverseTipWipe)
+        {
+            rv += writeCoordinates(target_point) % " EM=0";
+        }
+        else
+        {
+            rv += writeCoordinates(target_point) % " EM=1";
+        }
 
         //add comment for gcode parser
         if (path_modifiers != PathModifiers::kNone)
@@ -335,8 +351,7 @@ namespace ORNL
         rv += m_i % QString::number(Distance(center_point.x() - start_point.x()).to(m_meta.m_distance_unit), 'f', 4) %
               m_j % QString::number(Distance(center_point.y() - start_point.y()).to(m_meta.m_distance_unit), 'f', 4) %
               m_x % QString::number(Distance(end_point.x()).to(m_meta.m_distance_unit), 'f', 4) %
-              m_y % QString::number(Distance(end_point.y()).to(m_meta.m_distance_unit), 'f', 4);
-
+              m_y % QString::number(Distance(end_point.y()).to(m_meta.m_distance_unit), 'f', 4) % " EM=1";
         // write vertical coordinate along the correct axis (Z or W) according to printer settings
         // only output Z/W coordinate if there was a change in Z/W
         Distance z_offset = m_sb->setting< Distance >(Constants::PrinterSettings::Dimensions::kZOffset);
@@ -426,9 +441,24 @@ namespace ORNL
     QString SiemensWriter::writeShutdown()
     {
         QString rv;
-        rv += comment("PARK");
-        rv += m_sb->setting< QString >(Constants::PrinterSettings::GCode::kEndCode) % m_newline %
-              "M30" % commentSpaceLine("END OF G-CODE");
+
+        // Voeg een comment toe voor de shutdown
+        rv += comment("END PROGRAM") % m_newline;
+
+        rv += m_sb->setting< QString >(Constants::PrinterSettings::GCode::kEndCode) % m_newline;
+
+        rv += "EXTRUDERSPEED2(0,0,1)" % commentSpaceLine("EXTRUDERSPEED 0 RPM");
+
+        Distance current_height = m_current_z;
+        Distance new_height = current_height + 50000;
+
+        rv += "G1 Z" % QString::number(new_height.to(m_meta.m_distance_unit), 'f', 4) % " F10000" %
+              commentSpaceLine("MOVE UP 50MM");
+
+        rv += "H[10]=1" % commentSpaceLine("EXTRUDER OFF");
+
+        rv += "M30" % commentSpaceLine("END OF G-CODE");
+
         return rv;
     }
 
@@ -489,4 +519,4 @@ namespace ORNL
         return rv;
     }
 
-}  // namespace ORNL
+}  // namespace Colin Otten
