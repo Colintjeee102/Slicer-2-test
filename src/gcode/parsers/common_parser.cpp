@@ -958,7 +958,6 @@ namespace ORNL
 
     void CommonParser::G1Handler(QVector<QStringRef> params)
     {
-        //validate parameters
         if (params.empty())
         {
             QString exceptionString;
@@ -973,180 +972,199 @@ namespace ORNL
         char current_parameter;
         NT current_value;
         bool no_error, x_not_used = true, y_not_used = true, z_not_used = true,
-                       w_not_used = true, f_not_used = true, s_not_used = true,
-                       e_not_used = true, is_motion_command = false;
+            w_not_used = true, f_not_used = true, s_not_used = true,
+            e_not_used = true, is_motion_command = false;
+
+        QVector<QString> optionalParams; // Store unknown parameters
 
         for(QStringRef ref : params)
         {
-            // Retriving the first character in the QString and making it a char
             current_parameter = ref.at(0).toLatin1();
-            current_value     = ref.right(ref.size() - 1).toDouble(&no_error);
+            QString paramValue = ref.mid(1).toString();
+
+            // Check if the value is numeric
+            current_value = paramValue.toDouble(&no_error);
+
             if (!no_error)
             {
-                throwFloatConversionErrorException();
+                // Store as optional parameter instead of throwing an error
+                optionalParams.push_back(ref.toString());
+                continue; // Skip normal processing
             }
 
             switch (current_parameter)
             {
-                case ('X'):
-                case ('x'):
-                    if (x_not_used)
-                    {
-                        current_value *= m_distance_unit();
-                        setXPos(current_value);
-                        x_not_used = false;
-                        is_motion_command = true;
-                    }
-                    else
-                    {
-                        throwMultipleParameterException(current_parameter);
-                    }
-                    break;
+            case ('X'):
+            case ('x'):
+                if (x_not_used)
+                {
+                    current_value *= m_distance_unit();
+                    setXPos(current_value);
+                    x_not_used = false;
+                    is_motion_command = true;
+                }
+                else
+                {
+                    throwMultipleParameterException(current_parameter);
+                }
+                break;
 
-                case ('Y'):
-                case ('y'):
-                    if (y_not_used)
-                    {
-                        current_value *= m_distance_unit();
-                        setYPos(current_value);
-                        y_not_used = false;
-                        is_motion_command = true;
-                    }
-                    else
-                    {
-                        throwMultipleParameterException(current_parameter);
-                    }
-                    break;
+            case ('Y'):
+            case ('y'):
+                if (y_not_used)
+                {
+                    current_value *= m_distance_unit();
+                    setYPos(current_value);
+                    y_not_used = false;
+                    is_motion_command = true;
+                }
+                else
+                {
+                    throwMultipleParameterException(current_parameter);
+                }
+                break;
 
-                case ('Z'):
-                case ('z'):
-                    if (z_not_used)
+            case ('Z'):
+            case ('z'):
+                if (z_not_used)
+                {
+                    if (m_negate_z_value)
                     {
-                        if (m_negate_z_value)
-                        {
-                            current_value = current_value * -1;
-                        }
-                        current_value *= m_distance_unit();
-                        setZPos(current_value);
-                        z_not_used = false;
-                        is_motion_command = true;
+                        current_value = current_value * -1;
                     }
-                    else
-                    {
-                        throwMultipleParameterException(current_parameter);
-                    }
-                    break;
+                    current_value *= m_distance_unit();
+                    setZPos(current_value);
+                    z_not_used = false;
+                    is_motion_command = true;
+                }
+                else
+                {
+                    throwMultipleParameterException(current_parameter);
+                }
+                break;
 
-                case ('W'):
-                case ('w'):
-                    if (w_not_used)
-                    {
-                        current_value *= m_distance_unit();
-                        setWPos(current_value);
-                        w_not_used = false;
-                        is_motion_command = true;
-                    }
-                    else
-                    {
-                        throwMultipleParameterException(current_parameter);
-                    }
-                    break;
+            case ('W'):
+            case ('w'):
+                if (w_not_used)
+                {
+                    current_value *= m_distance_unit();
+                    setWPos(current_value);
+                    w_not_used = false;
+                    is_motion_command = true;
+                }
+                else
+                {
+                    throwMultipleParameterException(current_parameter);
+                }
+                break;
 
-                case ('F'):
-                case ('f'):
-                    if (f_not_used)
-                    {
-                        current_value *= m_velocity_unit();
-                        setSpeed(current_value);
-                        f_not_used = false;
-                    }
-                    else
-                    {
-                        throwMultipleParameterException(current_parameter);
-                    }
-                    break;
+            case ('F'):
+            case ('f'):
+                if (f_not_used)
+                {
+                    current_value *= m_velocity_unit();
+                    setSpeed(current_value);
+                    f_not_used = false;
+                }
+                else
+                {
+                    throwMultipleParameterException(current_parameter);
+                }
+                break;
 
-                case ('S'):
-                case ('s'):
-                    if (s_not_used)
-                    {
-                        current_value *= m_angular_velocity_unit();
-                        setSpindleSpeed(current_value);
-                        s_not_used = false;
-                    }
-                    else
-                    {
-                        throwMultipleParameterException(current_parameter);
-                    }
-                    break;
+            case ('S'):
+            case ('s'):
+                if (s_not_used)
+                {
+                    current_value *= m_angular_velocity_unit();
+                    setSpindleSpeed(current_value);
+                    s_not_used = false;
+                }
+                else
+                {
+                    throwMultipleParameterException(current_parameter);
+                }
+                break;
 
-                case ('Q'):
-                case ('q'):
-                    if (s_not_used)
-                    {
-                        current_value *= m_angular_velocity_unit();
-                        setSpindleSpeed(current_value);
-                        s_not_used = false;
-                    }
-                    else
-                    {
-                        throwMultipleParameterException(current_parameter);
-                    }
-                    break;
+            case ('Q'):
+            case ('q'):
+                if (s_not_used)
+                {
+                    current_value *= m_angular_velocity_unit();
+                    setSpindleSpeed(current_value);
+                    s_not_used = false;
+                }
+                else
+                {
+                    throwMultipleParameterException(current_parameter);
+                }
+                break;
 
-                case ('M'):
-                case ('m'):
-                    break;
+            case ('M'):
+            case ('m'):
+                break;
 
-                case ('L'):
-                case ('l'):
-                    break;
+            case ('L'):
+            case ('l'):
+                break;
 
-                case ('A'):
-                case ('a'):
-                case ('B'):
-                case ('b'):
-                case ('E'):
-                case ('e'):
-                    if(e_not_used)
+            case ('A'):
+            case ('a'):
+            case ('B'):
+            case ('b'):
+            case ('E'):
+            case ('e'):
+                if(e_not_used)
+                {
+                    current_value *= m_distance_unit();
+                    if(m_e_absolute)
                     {
-                        current_value *= m_distance_unit();
-                        if(m_e_absolute)
-                        {
-                            if(current_value > MotionEstimation::m_previous_e)
-                                turnOnActiveExtruders();
-                            else
-                                turnOffActiveExtruders();
-                        }
+                        if(current_value > MotionEstimation::m_previous_e)
+                            turnOnActiveExtruders();
                         else
-                        {
-                            if(current_value > 0)
-                                turnOnActiveExtruders();
-                            else
-                                turnOffActiveExtruders();
-                        }
-                        MotionEstimation::m_current_e = current_value;
-                        e_not_used = false;
+                            turnOffActiveExtruders();
                     }
                     else
                     {
-                        throwMultipleParameterException(current_parameter);
+                        if(current_value > 0)
+                            turnOnActiveExtruders();
+                        else
+                            turnOffActiveExtruders();
                     }
-                    break;
+                    MotionEstimation::m_current_e = current_value;
+                    e_not_used = false;
+                }
+                else
+                {
+                    throwMultipleParameterException(current_parameter);
+                }
+                break;
 
             default:
-                    QString exceptionString;
-                    QTextStream(&exceptionString)
-                        << "Error: Unknown parameter " << ref.toString()
-                        << " on GCode line "
-                        << m_current_gcode_command.getLineNumber()
-                        << ", for GCode command G1" << "\n"
-                        << "With GCode command string: "
-                        << getCurrentCommandString();
-                    throw IllegalParameterException(exceptionString);
+                // Store unknown parameters instead of throwing an error
+                optionalParams.push_back(ref.toString());
+                break;
             }
-            m_current_gcode_command.addParameter(current_parameter,
-                                                 current_value);
+
+            m_current_gcode_command.addParameter(current_parameter, current_value);
+        }
+
+        // Store optional parameters (like EM=1)
+        for (const QString& param : optionalParams)
+        {
+            bool conversionSuccess;
+            double numericValue = param.mid(1).toDouble(&conversionSuccess);
+
+            if (conversionSuccess)
+            {
+                // If it's a valid number, store it as a double
+                m_current_gcode_command.addOptionalParameter(param.at(0).toLatin1(), numericValue);
+            }
+            else
+            {
+                // If it's not numeric, store it separately (modify as needed)
+                qDebug() << "Skipping non-numeric optional parameter: " << param;
+            }
         }
 
         m_current_gcode_command.setExtrudersOn(m_extruders_on);
@@ -1168,29 +1186,15 @@ namespace ORNL
         {
             if(m_extruders_on[i])
             {
-                    MotionEstimation::m_printing_distance += temp;
-                    isPrinting = true;
-                    break;
+                MotionEstimation::m_printing_distance += temp;
+                isPrinting = true;
+                break;
             }
         }
         if(!isPrinting)
             MotionEstimation::m_travel_distance += temp;
 
         m_with_F_value = false;
-        // Checks if the command did not use a movement command, but only a flow
-        // command. Not needed. if( x_not_used && y_not_used && z_not_used &&
-        // w_not_used )
-        // {
-        //     QString exceptionString;
-        //    QTextStream(&exceptionString) << "Error no movement command passed
-        //    with flow rate on GCode line "
-        //                                  <<
-        //                                  m_current_gcode_command.getLineNumber()
-        //                                  << "\n"
-        //                                  << "With GCode command string: "
-        //                                  << getCurrentCommandString();
-        //    throw IllegalParameterException(exceptionString);
-        // }
     }
 
     void CommonParser::G1HandlerHelper(QVector<QStringRef> params, QVector<QStringRef> optionalParams)
