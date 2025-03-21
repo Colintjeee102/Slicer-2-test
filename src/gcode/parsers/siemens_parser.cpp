@@ -40,4 +40,12 @@ namespace ORNL
         //redirect - essentially M5 command
         CommonParser::M5Handler(params);
     }
+    void SiemensParser::G1Handler(QVector<QStringRef> params)
+    {
+        CommonParser::G1Handler(params); // Call the original function
+
+        // ✅ Force a space before EM=1
+        QString currentComment = m_current_gcode_command.getComment();
+        m_current_gcode_command.setComment(currentComment + "1");
+    }
 }  // namespace ORNL
