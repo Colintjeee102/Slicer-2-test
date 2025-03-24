@@ -146,8 +146,16 @@ namespace ORNL
         Point new_start_location;
 
         //Use updated start location if this is the first travel
-        if(m_first_travel)
-            new_start_location = m_start_point;
+        if (m_first_travel) {
+            Point first_print_location = target_location; // De echte start van de print
+            Point offset_start = first_print_location + Point(-150000, 0, 0); // 150 mm links van de eerste print
+
+            rv += m_G1 % writeCoordinates(offset_start) % " EM=0" % commentSpaceLine("MOVE TO START POSITION");
+            rv += m_G1 % writeCoordinates(first_print_location) % " EM=1" % commentSpaceLine("MOVE TO PRINT START");
+
+            m_first_travel = false;
+            return rv; // Zorgt ervoor dat er geen extra travel wordt gegenereerd
+        }
         else
             new_start_location = start_location;
 
