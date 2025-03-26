@@ -36,7 +36,7 @@ namespace ORNL
 
             rv += "EXTRUDERSPEED2(" % QString::number(layer_width.to(m_meta.m_distance_unit), 'f', 4) % "," %
                   QString::number(layer_height.to(m_meta.m_distance_unit), 'f', 4) % ",1400)" %
-                  commentSpaceLine("SET THE EXTRUDERSPEED") % m_newline;
+                  commentSpaceLine("SET THE EXTRUDERSPEED");
         }
 
         if(m_sb->setting< int >(Constants::PrinterSettings::GCode::kEnableBoundingBox))
@@ -54,8 +54,6 @@ namespace ORNL
 
         if(m_sb->setting< QString >(Constants::PrinterSettings::GCode::kStartCode) != "")
             rv += m_sb->setting< QString >(Constants::PrinterSettings::GCode::kStartCode);
-
-        rv += m_newline;
 
         rv += commentLine("LAYER COUNT: " % QString::number(num_layers));
 
@@ -148,7 +146,7 @@ namespace ORNL
         //Use updated start location if this is the first travel
         if (m_first_travel) {
             Point first_print_location = target_location; // De echte start van de print
-            Point offset_start = first_print_location + Point(-150000, 0, 0); // 150 mm links van de eerste print
+            Point offset_start = first_print_location + Point(0, -150000, 0); // 150 mm links van de eerste print
 
             rv += m_G1 % writeCoordinates(offset_start) % " EM=0" % commentSpaceLine("MOVE TO START POSITION");
             rv += m_G1 % writeCoordinates(first_print_location) % " EM=1" % commentSpaceLine("MOVE TO PRINT START");
@@ -208,92 +206,31 @@ namespace ORNL
     QString SiemensWriter::writeLine(const Point& start_point, const Point& target_point, const QSharedPointer<SettingsBase> params)
     {
         Velocity speed = params->setting<Velocity>(Constants::SegmentSettings::kSpeed);
+        int rpm = params->setting<int>(Constants::SegmentSettings::kExtruderSpeed);
         RegionType region_type = params->setting<RegionType>(Constants::SegmentSettings::kRegionType);
         PathModifiers path_modifiers = params->setting<PathModifiers>(Constants::SegmentSettings::kPathModifiers);
+        float output_rpm = rpm * m_sb->setting< float >(Constants::PrinterSettings::MachineSpeed::kGearRatio);
 
         QString rv;
 
-        //This syntax doesn't currently issue extruder on/off commands because they are manually input to the
-        //start/end G-Code of the setting
-        //Write out the region starting G-Code if this is the first segment of the path
-        //First segment of the path is signified by extruder being off and the modifier isn't one of five ending modifiers
-        if(m_extruders_on[0] == false && path_modifiers != PathModifiers::kSlowDown && path_modifiers != PathModifiers::kForwardTipWipe
-            && path_modifiers != PathModifiers::kReverseTipWipe && path_modifiers != PathModifiers::kCoasting
-            && path_modifiers != PathModifiers::kSpiralLift)
+        //turn on the extruder if it isn't already on
+        if (m_extruders_on[0] == false && rpm > 0)
         {
-            m_extruders_on[0] = true;
-            if (region_type == RegionType::kPerimeter)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kPerimeterStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kPerimeterStart) % m_newline;
-            }
-            else if (region_type == RegionType::kInset)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInsetStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInsetStart) % m_newline;
-            }
-            else if(region_type == RegionType::kSkeleton)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkeletonStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkeletonStart) % m_newline;
-            }
-            else if (region_type == RegionType::kSkin)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkinStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkinStart) % m_newline;
-            }
-            else if (region_type == RegionType::kInfill)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInfillStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInfillStart) % m_newline;
-            }
-            else if (region_type == RegionType::kSupport)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSupportStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSupportStart) % m_newline;
-            }
+            rv += writeExtruderOn(region_type, rpm);
         }
-        //Write out the region ending G-Code if this is the first segment of the ending path modifiers
-        //First segment is signified by extruder being on and the modifier is one of five ending modifiers
-        else if(m_extruders_on[0] == true && (path_modifiers == PathModifiers::kSlowDown || path_modifiers == PathModifiers::kForwardTipWipe
-                                               || path_modifiers == PathModifiers::kReverseTipWipe || path_modifiers == PathModifiers::kCoasting
-                                               || path_modifiers == PathModifiers::kSpiralLift))
+
+        if (rpm != m_current_rpm && rpm == 0)
         {
-            m_extruders_on[0] = false;
-            if (region_type == RegionType::kPerimeter)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kPerimeterEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kPerimeterEnd) % m_newline;
-            }
-            else if (region_type == RegionType::kInset)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInsetEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInsetEnd) % m_newline;
-            }
-            else if (region_type == RegionType::kSkeleton)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkeletonEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkeletonEnd) % m_newline;
-            }
-            else if (region_type == RegionType::kSkin)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkinEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkinEnd) % m_newline;
-            }
-            else if (region_type == RegionType::kInfill)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInfillEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInfillEnd) % m_newline;
-            }
-            else if (region_type == RegionType::kSupport)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSupportEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSupportEnd) % m_newline;
-            }
+            rv += writeExtruderOff();
+            m_current_rpm = rpm;
+        }
+        else if (rpm != m_current_rpm)
+        {
+            rv += m_M3 % m_s % QString::number(output_rpm) % commentSpaceLine("UPDATE EXTRUDER RPM");
+            m_current_rpm = rpm;
         }
 
         rv += m_G1;
-        //update feedrate if needed
         if (getFeedrate() != speed || m_layer_start)
         {
             setFeedrate(speed);
@@ -321,6 +258,7 @@ namespace ORNL
 
         return rv;
     }
+
 
     QString SiemensWriter::writeArc(const Point &start_point,
                                            const Point &end_point,
