@@ -42,10 +42,7 @@ namespace ORNL
     }
     void SiemensParser::G1Handler(QVector<QStringRef> params)
     {
-        CommonParser::G1Handler(params); // Call the original function
-
-        // ✅ Force a space before EM=1
-        QString currentComment = m_current_gcode_command.getComment();
-        m_current_gcode_command.setComment(currentComment + "1");
+        //redirect - essentially G1 command
+        CommonParser::G1Handler(params);
     }
 }  // namespace ORNL
