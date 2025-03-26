@@ -97,8 +97,7 @@ namespace ORNL
 
         rv += commentLine(QString("Nedcam shaping technology")) %
                commentLine(QString("Copyright " % QString::number(QDate::currentDate().year()) % "")) %
-               commentLine(QString("G-Code Syntax: ") % syntax) %
-               m_newline;
+               commentLine(QString("G-Code Syntax: ") % syntax);
 
         return rv;
     }
@@ -286,7 +285,6 @@ namespace ORNL
         if(syntax == GcodeSyntax::kIngersoll)
             text += commentLine("---END HEADER");
 
-        text += m_newline;
         return text;
     }
 
