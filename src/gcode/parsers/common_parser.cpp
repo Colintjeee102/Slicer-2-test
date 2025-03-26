@@ -346,24 +346,20 @@ namespace ORNL
         double currentZOffset = sb->setting< Distance >(Constants::PrinterSettings::Dimensions::kZOffset).to(m_distance_unit);
         bool no_error;
 
-        //parse each line
+        // Parse each line
         for(m_current_line; m_current_line <= m_current_end_line; ++m_current_line)
         {
-            //extract components of command
-            //handlers will also update appropriate state
-            //if the line is not just an empty line or whitespace
-
+            // Extract components of the command
             if(m_upper_lines[m_current_line].contains("[#") && sb->setting<int>(Constants::PrinterSettings::Dimensions::kUseVariableForZ))
             {
-                // If using a variable Z, find the value added to the variable, calculate the total value of Z by replacing the variable with the value from the printer settings
-                // then create a new line of g-code to be sent to the parser that is formatted the way a line is normally formatted (without the variable)
+                // Handle variable Z
                 double zVal;
                 int second = m_upper_lines[m_current_line].indexOf("]");
                 int zLoc = m_upper_lines[m_current_line].indexOf("Z");
                 if(m_upper_lines[m_current_line].contains("+"))
                 {
-                    int first = m_upper_lines[m_current_line].indexOf("+")+2;
-                    QString zAdditionString = m_upper_lines[m_current_line].mid(first, second-first);
+                    int first = m_upper_lines[m_current_line].indexOf("+") + 2;
+                    QString zAdditionString = m_upper_lines[m_current_line].mid(first, second - first);
                     zVal = zAdditionString.toDouble(&no_error);
                     if (!no_error)
                     {
@@ -376,8 +372,8 @@ namespace ORNL
                 }
 
                 zVal += currentZOffset;
-                newCurrentLine = m_upper_lines[m_current_line].mid(0, zLoc+1) % QString::number(zVal, 'f', 4) % m_upper_lines[m_current_line].mid(second+1);
-            }            
+                newCurrentLine = m_upper_lines[m_current_line].mid(0, zLoc + 1) % QString::number(zVal, 'f', 4) % m_upper_lines[m_current_line].mid(second + 1);
+            }
             else if(m_upper_lines[m_current_line].contains("[#"))
             {
                 // Ignore lines with variable definition if variable Z is not enabled
@@ -411,6 +407,7 @@ namespace ORNL
                 // Save the current line to be sent for the parseCommand function
                 newCurrentLine = m_upper_lines[m_current_line];
             }
+
             if(!m_upper_lines[m_current_line].midRef(0).trimmed().isEmpty())
             {
                 if(skip)
@@ -437,12 +434,10 @@ namespace ORNL
                 {
                     parseCommand(newCurrentLine, m_current_line + m_insertions);
 
-                    // If a new layer has just started, check if previous layer needs to be adjusted
-                    // to meet the minimum layer time
-                    if(m_current_gcode_command.getCommandIsEndOfLayer() ||
-                            m_current_line == m_current_end_line) {
+                    // Adjust the layer time if necessary
+                    if(m_current_gcode_command.getCommandIsEndOfLayer() || m_current_line == m_current_end_line) {
                         if(m_file_settings[Constants::MaterialSettings::Cooling::kForceMinLayerTime] &&
-                                m_allow_layer_alter && m_current_layer > 0) {
+                            m_allow_layer_alter && m_current_layer > 0) {
                             Time increaseTime = m_min_layer_time_allowed - m_layer_times[m_current_layer][m_current_nozzle];
                             Time decreaseTime = m_layer_times[m_current_layer][m_current_nozzle] - m_max_layer_time_allowed;
 
@@ -454,13 +449,13 @@ namespace ORNL
                             if(m_layer_G1F_times[m_current_layer] > 0) {
                                 if(increaseTime > 0) { // If layer time less than minimum, slow feedrate or add dwell
                                     if(m_min_layer_time_choice == ForceMinimumLayerTime::kSlow_Feedrate) {
-                                        // Ratio uses the layer time as well as the total time for all G1 F moves, which are what get adjusted
+                                        // Adjust feedrate based on increase time
                                         double ratio = (increaseTime / m_layer_G1F_times[m_current_layer])();
                                         double modifier = 1 / (1.0 + ratio);
 
                                         if(modifier < minModifier && minModifier > 0 && minModifier < 1){
-                                                modifier = minModifier;
-                                                emit forwardInfoToMainWindow("Computed speed is lower than min machine speed, machine min speed will be used");
+                                            modifier = minModifier;
+                                            emit forwardInfoToMainWindow("Computed speed is lower than min machine speed, machine min speed will be used");
                                         }
 
                                         if(modifier > 0 && modifier < 1) {
@@ -475,13 +470,12 @@ namespace ORNL
                                 }
                                 else if(decreaseTime > 0) { // If layer time more than maximum, increase feedrate
                                     if(m_min_layer_time_choice == ForceMinimumLayerTime::kSlow_Feedrate){
-                                        // Ratio uses the layer time as well as the total time for all G1 F moves, which are what get adjusted
                                         double ratio = (decreaseTime / m_layer_G1F_times[m_current_layer])();
                                         double modifier = 1 / (1.0 - ratio);
 
                                         if(modifier > maxModifier && maxModifier > 1){
-                                                modifier = maxModifier;
-                                                emit forwardInfoToMainWindow("Computed speed exceeds max machine speed, machine max speed will be used");
+                                            modifier = maxModifier;
+                                            emit forwardInfoToMainWindow("Computed speed exceeds max machine speed, machine max speed will be used");
                                         }
 
                                         if(modifier > 1) {
@@ -490,7 +484,7 @@ namespace ORNL
                                         }
                                     }
                                     else if(m_min_layer_time_choice == ForceMinimumLayerTime::kUse_Purge_Dwells) {
-                                        emit forwardInfoToMainWindow("Add dwell time method was selected, can not modify layer times");
+                                        emit forwardInfoToMainWindow("Add dwell time method was selected, cannot modify layer times");
                                     }
                                 }
                             }
@@ -499,19 +493,18 @@ namespace ORNL
                         if(m_current_line == m_current_end_line) break;
 
                         m_last_layer_line_start = m_current_line;
-                        //++actualLayer;
                         ++m_current_layer;
                         if(m_current_layer <= 1 || layerSkip == 1)
                             skip = false;
                         else
                             skip = m_current_layer % layerSkip != 0;
 
-                        // add empty slots to arrays for this layer
-                    	QList<Time> extruder_times;
-                    	for (int i = 0; i < m_num_extruders; ++i)
-                        	extruder_times.push_back(Time());
+                        // Add empty slots for this layer
+                        QList<Time> extruder_times;
+                        for (int i = 0; i < m_num_extruders; ++i)
+                            extruder_times.push_back(Time());
 
-                    	m_layer_times.push_back(extruder_times);
+                        m_layer_times.push_back(extruder_times);
                         m_layer_FR_modifiers.push_back(1.0);
                         m_layer_G1F_times.push_back(Time());
                         m_layer_volumes.push_back(Volume());
@@ -528,7 +521,6 @@ namespace ORNL
                 return QList<QList<GcodeCommand>>();
         }
 
-        //emit layer times and key info
         return m_motion_commands;
     }
 
@@ -2229,84 +2221,48 @@ namespace ORNL
             m_layer_FR_modifiers[m_current_layer] = modifier;
 
             QList<GcodeCommand>::iterator current_layer_motion_end =
-                    m_motion_commands[m_current_layer].end();
+                m_motion_commands[m_current_layer].end();
             --current_layer_motion_end;
 
             QList<GcodeCommand>::const_iterator current_layer_motion_begin =
-                    m_motion_commands[m_current_layer].begin();
+                m_motion_commands[m_current_layer].begin();
             --current_layer_motion_begin;
 
             while(current_layer_motion_end != current_layer_motion_begin &&
-                  current_layer_motion_end->getLineNumber() > m_last_layer_line_start)
+                   current_layer_motion_end->getLineNumber() > m_last_layer_line_start)
             {
                 auto parameters = current_layer_motion_end->getParameters();
+
+                // Pas altijd de F-waarde aan, onafhankelijk van de aanwezigheid van de S-waarde
                 if(parameters.contains(m_f_parameter.toLatin1()))
                 {
-                    if(sb->setting<int>(Constants::MaterialSettings::Extruder::kEnableM3S)) {
-                        int cmd_index = current_layer_motion_end->getLineNumber() - 1;
-                        QString& line = m_lines[cmd_index];
-                        
-                        if(line.startsWith("M3 ")) {
-                            QRegularExpressionMatch myMatch = m_s_param_and_value.match(line);
-                            double value = myMatch.capturedRef().mid(1).toDouble();
-                            
-                            if(value != 0) {
-                                double extruderModifier = sb->setting< double >(Constants::MaterialSettings::Cooling::kExtruderScaleFactor);
-                                
-                                // If slowing down, the multiplier for the extruder should be the inverse of the scale factor
-                                if(modifier < 1) {
-                                    extruderModifier = 1 / extruderModifier;
-                                }
-                                
-                                line = line.leftRef(myMatch.capturedStart()) %
-                                       m_s_parameter %
-                                       QString::number(value * modifier * extruderModifier, 'f', 4) %
-                                       line.midRef(myMatch.capturedEnd());
-                                
-                                m_lines.insert(cmd_index + 1, line);
-                                m_lines.removeAt(cmd_index);
-                            }
-                        }
-                    }
-
                     QString& line = m_lines[current_layer_motion_end->getLineNumber()];
                     QRegularExpressionMatch myMatch = m_f_param_and_value.match(line);
                     double value = myMatch.capturedRef().mid(1).toDouble();
                     line = line.leftRef(myMatch.capturedStart()) % m_f_parameter %
-                            QString::number(value * modifier, 'f', 4)
-                            % line.midRef(myMatch.capturedEnd());
+                           QString::number(value * modifier, 'f', 4)
+                           % line.midRef(myMatch.capturedEnd());
                     current_layer_motion_end->addParameter(m_f_parameter.toLatin1(),
-                                                parameters[m_f_parameter.toLatin1()] * modifier);
+                                                           parameters[m_f_parameter.toLatin1()] * modifier);
                 }
-                if(parameters.contains(m_q_parameter.toLatin1()) && current_layer_motion_end->getCommandID() != 5) // G5 also used the Q param, so spline are not supported by syntaxes that use it for spindle control
-                {
-                    QString& line = m_lines[current_layer_motion_end->getLineNumber()];
-                    QRegularExpressionMatch myMatch = m_q_param_and_value.match(line);
-                    double value = myMatch.capturedRef().mid(1).toDouble();
-                    double extruderModifier = sb->setting< double >(Constants::MaterialSettings::Cooling::kExtruderScaleFactor);
-                    // If slowing down, the multiplier for the extruder should be the inverse of the scale factor
-                    if(modifier < 1)
-                        extruderModifier = 1 / extruderModifier;
-                    line = line.leftRef(myMatch.capturedStart()) % m_q_parameter %
-                            QString::number(value * modifier * extruderModifier, 'f', 4) % line.midRef(myMatch.capturedEnd());
-                    current_layer_motion_end->addParameter(m_q_parameter.toLatin1(),
-                                                parameters[m_q_parameter.toLatin1()] * modifier);
-                }
+
+                // Pas de S-waarde alleen aan als deze aanwezig is en de 'kEnableWidthHeight' instelling niet is ingeschakeld
                 if(parameters.contains(m_s_parameter.toLatin1()) && !sb->setting< bool >(Constants::ProfileSettings::SpecialModes::kEnableWidthHeight))
                 {
                     QString& line = m_lines[current_layer_motion_end->getLineNumber()];
                     QRegularExpressionMatch myMatch = m_s_param_and_value.match(line);
                     double value = myMatch.capturedRef().mid(1).toDouble();
                     double extruderModifier = sb->setting< double >(Constants::MaterialSettings::Cooling::kExtruderScaleFactor);
-                    // If slowing down, the multiplier for the extruder should be the inverse of the scale factor
+                    // Als de snelheid wordt verlaagd, moet de multiplier voor de extruder de inverse van de schaalfactor zijn
                     if(modifier < 1)
                         extruderModifier = 1 / extruderModifier;
                     line = line.leftRef(myMatch.capturedStart()) % m_s_parameter %
-                            QString::number(value * modifier * extruderModifier, 'f', 4)
-                            % line.midRef(myMatch.capturedEnd());
+                           QString::number(value * modifier * extruderModifier, 'f', 4)
+                           % line.midRef(myMatch.capturedEnd());
                     current_layer_motion_end->addParameter(m_s_parameter.toLatin1(),
-                                                parameters[m_s_parameter.toLatin1()] * modifier);
+                                                           parameters[m_s_parameter.toLatin1()] * modifier);
                 }
+
                 --current_layer_motion_end;
             }
         }
