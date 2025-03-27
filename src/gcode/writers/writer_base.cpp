@@ -46,7 +46,7 @@ namespace ORNL
 
     QString WriterBase::comment(const QString& text)
     {
-        return QString(m_meta.m_comment_starting_delimiter % text % m_meta.m_comment_ending_delimiter);
+        return QString(m_meta.m_comment_starting_delimiter % text % m_meta.m_comment_ending_delimiter );
     }
 
     QString WriterBase::commentLine(const QString& text)
@@ -290,19 +290,12 @@ namespace ORNL
 
     QString WriterBase::writeLayerChange(uint layer_number)
     {
-        return commentLine(QString("BEGINNING LAYER: ") % QString::number(layer_number + 1));
+        return commentLine( m_newline % QString("BEGINNING LAYER: ") % QString::number(layer_number + 1));
     }
 
     QString WriterBase::writeSettingsFooter()
     {
         QString rv;
-        rv += m_newline % commentLine("Settings Footer");
-        for(auto& el : m_sb->json().items())
-        {
-            rv += commentLine(QString::fromStdString(el.key()) % m_space % QString::fromStdString(el.value().dump()));
-        }
-        // Remove empty line from end of file that comes from the commentLine creating a new line
-        rv.chop(1);
         return rv;
     }
 
@@ -313,7 +306,7 @@ namespace ORNL
 
     QString WriterBase::writeCommentLine(QString comment)
     {
-        return "\n" + commentLine(comment);
+        return commentLine(comment);
     }
 
     void WriterBase::setFeedrate(Velocity feedrate)
