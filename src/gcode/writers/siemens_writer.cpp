@@ -24,13 +24,19 @@ namespace ORNL
         QString rv;
         if (m_sb->setting< int >(Constants::PrinterSettings::GCode::kEnableStartupCode))
         {
+            rv += commentLine(" ");
             rv += commentLine("START UP");
             rv += commentLine("G-CODE FOR AM FLEXBOT");
             rv += "G90" % commentSpaceLine("USE ABSOLUTE COORDINATES");
             rv += "G17" % commentSpaceLine("COORDINATE PLANE X/Y");
             rv += "G55" % commentSpaceLine("WORK OFFSET");
             rv += "CYCLE832(2,_finish,1)" % commentSpaceLine("ENABLE HIGH SPEED MACHINING CYCLE");
-            rv += "EXTRUDERSPEED2(0,0,1)" % commentSpaceLine("SET THE EXTRUDERSPEED TO 0 RPM");
+            rv += "EXTRUDERSPEED(0,0,1)" % commentSpaceLine("SET THE EXTRUDERSPEED TO 0 RPM");
+            Distance current_height = m_current_z;
+            Distance new_height = current_height + 200000;
+
+            rv += "G1 Z" % QString::number(new_height.to(m_meta.m_distance_unit), 'f', 4) % " F3000" %
+                  commentSpaceLine("MOVE UP 200MM");
             Distance layer_width = m_sb->setting<Distance>(Constants::ProfileSettings::Layer::kBeadWidth);
             Distance layer_height = m_sb->setting<Distance>(Constants::ProfileSettings::Layer::kLayerHeight);
 
@@ -55,7 +61,7 @@ namespace ORNL
         if(m_sb->setting< QString >(Constants::PrinterSettings::GCode::kStartCode) != "")
             rv += m_sb->setting< QString >(Constants::PrinterSettings::GCode::kStartCode);
 
-        rv += commentLine("LAYER COUNT: " % QString::number(num_layers));
+        rv += commentLine(" ")% commentLine("LAYER COUNT: " % QString::number(num_layers));
 
         return rv;
     }
@@ -89,40 +95,6 @@ namespace ORNL
     QString SiemensWriter::writeBeforePath(RegionType type)
     {
         QString rv;
-        //Commented out on 12/29/20 by Alex because these G-Code lines need issued after travels, not at the start of the region
-        /*if(!m_spiral_layer || m_first_print)
-        {
-            if (type == RegionType::kPerimeter)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kPerimeterStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kPerimeterStart) % m_newline;
-            }
-            else if (type == RegionType::kInset)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInsetStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInsetStart) % m_newline;
-            }
-            else if(type == RegionType::kSkeleton)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkeletonStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkeletonStart) % m_newline;
-            }
-            else if (type == RegionType::kSkin)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkinStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkinStart) % m_newline;
-            }
-            else if (type == RegionType::kInfill)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInfillStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInfillStart) % m_newline;
-            }
-            else if (type == RegionType::kSupport)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSupportStart).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSupportStart) % m_newline;
-            }
-        }*/
         return rv;
     }
 
@@ -322,40 +294,6 @@ namespace ORNL
     QString SiemensWriter::writeAfterPath(RegionType type)
     {
         QString rv;
-        //Commented out on 12/29/20 by Alex because these G-Code lines need issued immediately after printing paths, not after the ending modifiers
-        /*if(!m_spiral_layer)
-        {
-            if (type == RegionType::kPerimeter)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kPerimeterEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kPerimeterEnd) % m_newline;
-            }
-            else if (type == RegionType::kInset)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInsetEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInsetEnd) % m_newline;
-            }
-            else if (type == RegionType::kSkeleton)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkeletonEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkeletonEnd) % m_newline;
-            }
-            else if (type == RegionType::kSkin)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkinEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSkinEnd) % m_newline;
-            }
-            else if (type == RegionType::kInfill)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInfillEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kInfillEnd) % m_newline;
-            }
-            else if (type == RegionType::kSupport)
-            {
-                if (!m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSupportEnd).isEmpty())
-                    rv += m_sb->setting< QString >(Constants::ProfileSettings::GCode::kSupportEnd) % m_newline;
-            }
-        }*/
         return rv;
     }
 
@@ -380,7 +318,7 @@ namespace ORNL
     QString SiemensWriter::writeAfterLayer()
     {
         QString rv;
-        rv += m_sb->setting< QString >(Constants::PrinterSettings::GCode::kLayerCodeChange) % m_newline;
+        rv += m_sb->setting< QString >(Constants::PrinterSettings::GCode::kLayerCodeChange);
         return rv;
     }
 
@@ -389,7 +327,7 @@ namespace ORNL
         QString rv;
 
         // Voeg een comment toe voor de shutdown
-        rv += comment("END PROGRAM") % m_newline;
+        rv += commentLine("") % comment("END PROGRAM") % m_newline;
 
         rv += m_sb->setting< QString >(Constants::PrinterSettings::GCode::kEndCode) % m_newline;
 
@@ -398,7 +336,7 @@ namespace ORNL
         Distance current_height = m_current_z;
         Distance new_height = current_height + 50000;
 
-        rv += "G1 Z" % QString::number(new_height.to(m_meta.m_distance_unit), 'f', 4) % " F10000" %
+        rv += "G1 Z" % QString::number(new_height.to(m_meta.m_distance_unit), 'f', 4) % " F3000" %
               commentSpaceLine("MOVE UP 50MM");
 
         rv += "H[10]=1" % commentSpaceLine("EXTRUDER OFF");
