@@ -343,7 +343,7 @@ namespace ORNL
 
         rv += "M30" % commentSpaceLine("END OF G-CODE");
 
-        return rv;
+        return rv += ";";
     }
 
     QString SiemensWriter::writePurge(int RPM, int duration, int delay)
