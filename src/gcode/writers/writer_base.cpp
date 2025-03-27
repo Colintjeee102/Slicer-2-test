@@ -290,7 +290,7 @@ namespace ORNL
 
     QString WriterBase::writeLayerChange(uint layer_number)
     {
-        return commentLine( m_newline % QString("BEGINNING LAYER: ") % QString::number(layer_number + 1));
+        return commentLine( m_newline % QString(";BEGINNING LAYER: ") % QString::number(layer_number + 1));
     }
 
     QString WriterBase::writeSettingsFooter()
