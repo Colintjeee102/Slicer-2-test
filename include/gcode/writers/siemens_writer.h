@@ -81,6 +81,10 @@ namespace ORNL
 
     private:
 
+        bool m_first_layer_travel_written;  // Flag to track if first layer travel has been written
+        Point m_first_print_position;       // Store the first print position for proper travel
+
+        bool m_first_layer_written;
         //! \brief Writes G-Code to enable the tamper
         QString writeTamperOn();
         //! \brief Writes G-Code to disable the tamper
@@ -107,4 +111,4 @@ namespace ORNL
 
     };  // class SiemensWriter
 }  // namespace ORNL
-#endif  // SIEMENS_WRITER_H
+#endif  // SIEMENS_WRITER_
