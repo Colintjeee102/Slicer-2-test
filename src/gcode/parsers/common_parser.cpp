@@ -70,9 +70,9 @@ namespace ORNL
     Distance CommonParser::getCurrentGXDistance()
     {
         return MotionEstimation::calculateTimeAndVolume(
-                    m_current_layer, m_with_F_value, m_current_gcode_command.getCommandID() == 0, m_extruders_on,
-                    m_layer_G1F_times[m_current_layer], m_layer_times[m_current_layer][m_current_nozzle],
-                    m_layer_volumes[m_current_layer]);
+            m_current_layer, true, m_current_gcode_command.getCommandID() == 0, m_extruders_on,
+            m_layer_G1F_times[m_current_layer], m_layer_times[m_current_layer][m_current_nozzle],
+            m_layer_volumes[m_current_layer]);
     }
 
     //currently nothing of interest in header, so skip as long as line starts with
@@ -219,35 +219,39 @@ namespace ORNL
 
     void CommonParser::checkAndSetNecessarySettings()
     {
-        //some settings weren't found, so load from current settings
-        if(m_necessary_variables_copy.size() > 0)
+        // Settings die niet gevonden zijn, dus laden uit de huidige instellingen
+        if (m_necessary_variables_copy.size() > 0)
         {
-             QSharedPointer<SettingsBase> sb = GSM->getGlobal();
-             QHashIterator<QString, QString> i(m_necessary_variables_copy);
-             while (i.hasNext()) {
-                 i.next();
-                 QString currentVal = i.value();
-                 if(currentVal == Constants::MaterialSettings::Cooling::kForceMinLayerTime)
-                     m_file_settings.insert(i.value(), (double)sb->setting<bool>(currentVal));
-                 else
+            QSharedPointer<SettingsBase> sb = GSM->getGlobal();
+            QHashIterator<QString, QString> i(m_necessary_variables_copy);
+            while (i.hasNext())
+            {
+                i.next();
+                QString currentVal = i.value();
+                if (currentVal == Constants::MaterialSettings::Cooling::kForceMinLayerTime)
+                    m_file_settings.insert(i.value(), (double)sb->setting<bool>(currentVal));
+                else
                     m_file_settings.insert(i.value(), sb->setting<double>(currentVal));
-             }
+            }
         }
 
+        // Motion instellingen zonder extruder/RPM invloeden
         MotionEstimation::z_speed = m_file_settings[Constants::PrinterSettings::MachineSpeed::kZSpeed];
         MotionEstimation::max_xy_speed = m_file_settings[Constants::PrinterSettings::MachineSpeed::kMaxXYSpeed];
         MotionEstimation::w_table_speed = m_file_settings[Constants::PrinterSettings::MachineSpeed::kWTableSpeed];
         MotionEstimation::layerThickness = m_file_settings[Constants::ProfileSettings::Layer::kLayerHeight];
         MotionEstimation::extrusionWidth = m_file_settings[Constants::ProfileSettings::Layer::kBeadWidth];
 
-        if (MotionEstimation::max_xy_speed == 0){
+        if (MotionEstimation::max_xy_speed == 0)
+        {
             MotionEstimation::max_xy_speed = 25400;
             emit forwardInfoToMainWindow("Machine max speed is not set, using max speed as 1.00 in/sec");
         }
 
-        if(m_allow_layer_alter)
+        // We verwijderen de extruderinstellingen en RPM-gerelateerde zaken uit de feedrate-aanpassing
+        if (m_allow_layer_alter)
         {
-            if(m_file_settings[Constants::MaterialSettings::Cooling::kForceMinLayerTime])
+            if (m_file_settings[Constants::MaterialSettings::Cooling::kForceMinLayerTime])
             {
                 m_min_layer_time_choice = static_cast<ForceMinimumLayerTime>((int)m_file_settings[Constants::MaterialSettings::Cooling::kForceMinLayerTimeMethod]);
                 m_min_layer_time_allowed = m_file_settings[Constants::MaterialSettings::Cooling::kMinLayerTime];
@@ -1168,7 +1172,7 @@ namespace ORNL
             m_motion_commands[m_current_layer].push_back(m_current_gcode_command);
         }
 
-        m_with_F_value = m_current_spindle_speed != 0;
+        m_with_F_value = true;  // Always enable F-value processing
 
         Distance temp = getCurrentGXDistance();
         MotionEstimation::m_total_distance += temp;
@@ -2180,8 +2184,10 @@ namespace ORNL
         QSharedPointer<SettingsBase> sb = GSM->getGlobal();
         if(m_motion_commands[m_current_layer].size() > 0)
         {
-            double maxFeedRate = 1;
-            double minFeedRate = minModifier;
+            // Initialize with safe defaults
+            double maxFeedRate = 1.0;
+            double minFeedRate = std::numeric_limits<double>::max();
+            bool foundAnyFeedrate = false;
 
             QList<GcodeCommand>::iterator current_layer_motion_end = m_motion_commands[m_current_layer].end();
             --current_layer_motion_end;
@@ -2189,6 +2195,7 @@ namespace ORNL
             QList<GcodeCommand>::const_iterator current_layer_motion_begin = m_motion_commands[m_current_layer].begin();
             --current_layer_motion_begin;
 
+            // Scan through all commands in the current layer
             while(current_layer_motion_end != current_layer_motion_begin &&
                    current_layer_motion_end->getLineNumber() > m_last_layer_line_start)
             {
@@ -2197,19 +2204,48 @@ namespace ORNL
                 {
                     QString& line = m_lines[current_layer_motion_end->getLineNumber()];
                     QRegularExpressionMatch myMatch = m_f_param_and_value.match(line);
-                    double value = myMatch.capturedRef().mid(1).toDouble();
 
-                    minFeedRate = std::min(minFeedRate, value);
-                    maxFeedRate = std::max(maxFeedRate, value);
+                    if (myMatch.hasMatch()) {
+                        double value = myMatch.capturedRef().mid(1).toDouble();
+
+                        if (value > 0) {  // Ensure we only consider positive feedrates
+                            minFeedRate = std::min(minFeedRate, value);
+                            maxFeedRate = std::max(maxFeedRate, value);
+                            foundAnyFeedrate = true;
+                        }
+                    }
                 }
                 --current_layer_motion_end;
             }
 
+            // If we didn't find any feedrates, use safe defaults
+            if (!foundAnyFeedrate) {
+                minFeedRate = sb->setting<Velocity>(Constants::PrinterSettings::MachineSpeed::kMinXYSpeed).to(m_velocity_unit);
+                maxFeedRate = sb->setting<Velocity>(Constants::PrinterSettings::MachineSpeed::kMaxXYSpeed).to(m_velocity_unit);
+            }
+
+            // Calculate modifiers with proper bounds checking
             Velocity velocity;
-            maxModifier = (sb->setting<Velocity>(Constants::PrinterSettings::MachineSpeed::kMaxXYSpeed) /
-                           velocity.from(maxFeedRate, m_velocity_unit))();
-            minModifier = (sb->setting<Velocity>(Constants::PrinterSettings::MachineSpeed::kMinXYSpeed) /
-                           velocity.from(minFeedRate, m_velocity_unit))();
+            double machineMaxSpeed = sb->setting<Velocity>(Constants::PrinterSettings::MachineSpeed::kMaxXYSpeed).to(m_velocity_unit);
+            double machineMinSpeed = sb->setting<Velocity>(Constants::PrinterSettings::MachineSpeed::kMinXYSpeed).to(m_velocity_unit);
+
+            // Calculate max modifier (for speeding up)
+            if (maxFeedRate > 0) {
+                maxModifier = machineMaxSpeed / maxFeedRate;
+            } else {
+                maxModifier = 2.0;  // Default to doubling speed if we can't calculate
+            }
+
+            // Calculate min modifier (for slowing down)
+            if (minFeedRate > 0) {
+                minModifier = machineMinSpeed / minFeedRate;
+            } else {
+                minModifier = 0.5;  // Default to halving speed if we can't calculate
+            }
+
+            // Ensure modifiers are within reasonable bounds
+            maxModifier = std::min(maxModifier, 5.0);  // Don't allow more than 5x speedup
+            minModifier = std::max(minModifier, 0.1);  // Don't allow slower than 10% of original speed
         }
     }
 
@@ -2218,7 +2254,14 @@ namespace ORNL
         QSharedPointer<SettingsBase> sb = GSM->getGlobal();
         if(m_motion_commands[m_current_layer].size() > 0)
         {
+            // Store the modifier for this layer
             m_layer_FR_modifiers[m_current_layer] = modifier;
+
+            // Log the adjustment for debugging
+            emit forwardInfoToMainWindow("Adjusting feedrate for layer " +
+                                         QString::number(m_current_layer) +
+                                         " with modifier: " +
+                                         QString::number(modifier, 'f', 4));
 
             QList<GcodeCommand>::iterator current_layer_motion_end =
                 m_motion_commands[m_current_layer].end();
@@ -2228,45 +2271,110 @@ namespace ORNL
                 m_motion_commands[m_current_layer].begin();
             --current_layer_motion_begin;
 
+            int modifiedCommands = 0;
+
             while(current_layer_motion_end != current_layer_motion_begin &&
                    current_layer_motion_end->getLineNumber() > m_last_layer_line_start)
             {
                 auto parameters = current_layer_motion_end->getParameters();
+                int lineNumber = current_layer_motion_end->getLineNumber();
 
-                // Pas altijd de F-waarde aan, onafhankelijk van de aanwezigheid van de S-waarde
-                if(parameters.contains(m_f_parameter.toLatin1()))
-                {
-                    QString& line = m_lines[current_layer_motion_end->getLineNumber()];
-                    QRegularExpressionMatch myMatch = m_f_param_and_value.match(line);
-                    double value = myMatch.capturedRef().mid(1).toDouble();
-                    line = line.leftRef(myMatch.capturedStart()) % m_f_parameter %
-                           QString::number(value * modifier, 'f', 4)
-                           % line.midRef(myMatch.capturedEnd());
-                    current_layer_motion_end->addParameter(m_f_parameter.toLatin1(),
-                                                           parameters[m_f_parameter.toLatin1()] * modifier);
-                }
+                // Ensure line number is valid
+                if (lineNumber >= 0 && lineNumber < m_lines.size()) {
+                    // Adjust F parameter (feedrate)
+                    if(parameters.contains(m_f_parameter.toLatin1()))
+                    {
+                        QString& line = m_lines[lineNumber];
+                        QRegularExpressionMatch myMatch = m_f_param_and_value.match(line);
 
-                // Pas de S-waarde alleen aan als deze aanwezig is en de 'kEnableWidthHeight' instelling niet is ingeschakeld
-                if(parameters.contains(m_s_parameter.toLatin1()) && !sb->setting< bool >(Constants::ProfileSettings::SpecialModes::kEnableWidthHeight))
-                {
-                    QString& line = m_lines[current_layer_motion_end->getLineNumber()];
-                    QRegularExpressionMatch myMatch = m_s_param_and_value.match(line);
-                    double value = myMatch.capturedRef().mid(1).toDouble();
-                    double extruderModifier = sb->setting< double >(Constants::MaterialSettings::Cooling::kExtruderScaleFactor);
-                    // Als de snelheid wordt verlaagd, moet de multiplier voor de extruder de inverse van de schaalfactor zijn
-                    if(modifier < 1)
-                        extruderModifier = 1 / extruderModifier;
-                    line = line.leftRef(myMatch.capturedStart()) % m_s_parameter %
-                           QString::number(value * modifier * extruderModifier, 'f', 4)
-                           % line.midRef(myMatch.capturedEnd());
-                    current_layer_motion_end->addParameter(m_s_parameter.toLatin1(),
-                                                           parameters[m_s_parameter.toLatin1()] * modifier);
+                        if (myMatch.hasMatch()) {
+                            double value = myMatch.capturedRef().mid(1).toDouble();
+                            double newValue = value * modifier;
+
+                            // Ensure the new value respects machine limits
+                            Velocity velocity;
+                            double maxSpeed = sb->setting<Velocity>(Constants::PrinterSettings::MachineSpeed::kMaxXYSpeed).to(m_velocity_unit);
+                            double minSpeed = sb->setting<Velocity>(Constants::PrinterSettings::MachineSpeed::kMinXYSpeed).to(m_velocity_unit);
+
+                            newValue = std::min(newValue, maxSpeed);
+                            newValue = std::max(newValue, minSpeed);
+
+                            // Update the line with the new feedrate
+                            line = line.leftRef(myMatch.capturedStart()) % m_f_parameter %
+                                   QString::number(newValue, 'f', 4) %
+                                   line.midRef(myMatch.capturedEnd());
+
+                            // Update the command parameter
+                            current_layer_motion_end->addParameter(m_f_parameter.toLatin1(), newValue);
+                            modifiedCommands++;
+                        }
+                    }
+
+                    // Adjust S parameter (spindle speed) if needed
+                    if(parameters.contains(m_s_parameter.toLatin1()) &&
+                        !sb->setting<bool>(Constants::ProfileSettings::SpecialModes::kEnableWidthHeight))
+                    {
+                        QString& line = m_lines[lineNumber];
+                        QRegularExpressionMatch myMatch = m_s_param_and_value.match(line);
+
+                        if (myMatch.hasMatch()) {
+                            double value = myMatch.capturedRef().mid(1).toDouble();
+                            double extruderModifier = sb->setting<double>(Constants::MaterialSettings::Cooling::kExtruderScaleFactor);
+
+                            // Adjust extruder modifier based on whether we're slowing down or speeding up
+                            if(modifier < 1)
+                                extruderModifier = 1 / extruderModifier;
+
+                            double newValue = value * modifier * extruderModifier;
+
+                            // Update the line with the new spindle speed
+                            line = line.leftRef(myMatch.capturedStart()) % m_s_parameter %
+                                   QString::number(newValue, 'f', 4) %
+                                   line.midRef(myMatch.capturedEnd());
+
+                            // Update the command parameter
+                            current_layer_motion_end->addParameter(m_s_parameter.toLatin1(), newValue);
+                        }
+                    }
+
+                    // Also check for Q parameter which might be used for feedrate in some machines
+                    if(parameters.contains(m_q_parameter.toLatin1()))
+                    {
+                        QString& line = m_lines[lineNumber];
+                        QRegularExpressionMatch myMatch = m_q_param_and_value.match(line);
+
+                        if (myMatch.hasMatch()) {
+                            double value = myMatch.capturedRef().mid(1).toDouble();
+                            double newValue = value * modifier;
+
+                            // Apply machine limits
+                            Velocity velocity;
+                            double maxSpeed = sb->setting<Velocity>(Constants::PrinterSettings::MachineSpeed::kMaxXYSpeed).to(m_velocity_unit);
+                            double minSpeed = sb->setting<Velocity>(Constants::PrinterSettings::MachineSpeed::kMinXYSpeed).to(m_velocity_unit);
+
+                            newValue = std::min(newValue, maxSpeed);
+                            newValue = std::max(newValue, minSpeed);
+
+                            // Update the line
+                            line = line.leftRef(myMatch.capturedStart()) % m_q_parameter %
+                                   QString::number(newValue, 'f', 4) %
+                                   line.midRef(myMatch.capturedEnd());
+
+                            // Update the command parameter
+                            current_layer_motion_end->addParameter(m_q_parameter.toLatin1(), newValue);
+                        }
+                    }
                 }
 
                 --current_layer_motion_end;
             }
+
+            // Log how many commands were modified
+            emit forwardInfoToMainWindow("Modified " + QString::number(modifiedCommands) +
+                                         " commands in layer " + QString::number(m_current_layer));
         }
     }
+
 
     void CommonParser::throwMultipleParameterException(char parameter)
     {
