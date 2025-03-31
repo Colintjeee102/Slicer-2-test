@@ -489,6 +489,7 @@ namespace ORNL
         QChar m_space;
 
     private:
+
         //! \brief calculates distance for the current motion segment
         Distance getCurrentGXDistance();
 
