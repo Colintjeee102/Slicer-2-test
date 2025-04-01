@@ -20,14 +20,11 @@ namespace ORNL
         m_extruders_on[0] = false;
         m_first_print = true;
         m_first_travel = true;
-        m_first_layer_travel_written = false;
         m_layer_start = true;
         m_min_z = 0.0f;
-
         QString rv;
         if (m_sb->setting< int >(Constants::PrinterSettings::GCode::kEnableStartupCode))
         {
-            rv += commentLine(" ");
             rv += commentLine("START UP");
             rv += commentLine("G-CODE FOR AM FLEXBOT");
             rv += "G90" % commentSpaceLine("USE ABSOLUTE COORDINATES");
@@ -43,8 +40,9 @@ namespace ORNL
             Distance layer_width = m_sb->setting<Distance>(Constants::ProfileSettings::Layer::kBeadWidth);
             Distance layer_height = m_sb->setting<Distance>(Constants::ProfileSettings::Layer::kLayerHeight);
 
-            rv += "EXTRUDERSPEED2(" % QString::number(layer_width.to(m_meta.m_distance_unit), 'f', 4) % "," %
-                  QString::number(layer_height.to(m_meta.m_distance_unit), 'f', 4) % ",1400)" %
+            rv += "EXTRUDERSPEED2(" +
+                  QString::number(layer_width.to(m_meta.m_distance_unit), 'f', 4) + "," +
+                  QString::number(layer_height.to(m_meta.m_distance_unit), 'f', 4) + ",1400)" +
                   commentSpaceLine("SET THE EXTRUDERSPEED");
         }
 
@@ -207,40 +205,39 @@ namespace ORNL
 
     QString SiemensWriter::writeLine(const Point& start_point, const Point& target_point, const QSharedPointer<SettingsBase> params)
     {
-        Velocity speed = params->setting<Velocity>(Constants::SegmentSettings::kSpeed);
-        int rpm = params->setting<int>(Constants::SegmentSettings::kExtruderSpeed);
-        RegionType region_type = params->setting<RegionType>(Constants::SegmentSettings::kRegionType);
-        PathModifiers path_modifiers = params->setting<PathModifiers>(Constants::SegmentSettings::kPathModifiers);
-        float output_rpm = rpm * m_sb->setting<float>(Constants::PrinterSettings::MachineSpeed::kGearRatio);
+        // Get all settings at once
+        const auto speed = params->setting<Velocity>(Constants::SegmentSettings::kSpeed);
+        const auto region_type = params->setting<RegionType>(Constants::SegmentSettings::kRegionType);
+        const auto path_modifiers = params->setting<PathModifiers>(Constants::SegmentSettings::kPathModifiers);
 
-        QString rv;
+        // Build the G1 command string with StringBuilder pattern
+        QString rv = m_G1;
 
-        rv += m_G1;
+        // Only add feedrate if it changed or it's layer start
         if (getFeedrate() != speed || m_layer_start)
         {
             setFeedrate(speed);
+            rv.reserve(rv.length() + 20); // Reserve approximate space needed
             rv += m_f % QString::number(speed.to(m_meta.m_velocity_unit));
             m_layer_start = false;
         }
 
-        // Writes WXYZ to destination
-        if (path_modifiers == PathModifiers::kForwardTipWipe || path_modifiers == PathModifiers::kReverseTipWipe)
-        {
-            rv += writeCoordinates(target_point) % " EM=0";
-        }
-        else
-        {
-            rv += writeCoordinates(target_point) % " EM=1";
-        }
+        // Add coordinates with EM parameter
+        rv += writeCoordinates(target_point);
+        rv += (path_modifiers == PathModifiers::kForwardTipWipe ||
+               path_modifiers == PathModifiers::kReverseTipWipe) ? " EM=0" : " EM=1";
 
-        // Add comment for gcode parser
+        // Add comment efficiently
         if (path_modifiers != PathModifiers::kNone)
-            rv += commentSpaceLine(toString(region_type) % m_space % toString(path_modifiers));
+        {
+            rv += commentSpaceLine(toString(region_type) + m_space + toString(path_modifiers));
+        }
         else
+        {
             rv += commentSpaceLine(toString(region_type));
+        }
 
         m_first_print = false;
-
         return rv;
     }
 
