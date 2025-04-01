@@ -245,7 +245,7 @@ namespace ORNL
         if (MotionEstimation::max_xy_speed == 0)
         {
             MotionEstimation::max_xy_speed = 25400;
-            emit forwardInfoToMainWindow("Machine max speed is not set, using max speed as 1.00 in/sec");
+            emit forwardInfoToMainWindow("Machine max speed is not set, using max speed as 1524 mm/min");
         }
 
         // We verwijderen de extruderinstellingen en RPM-gerelateerde zaken uit de feedrate-aanpassing
@@ -459,7 +459,6 @@ namespace ORNL
 
                                         if(modifier < minModifier && minModifier > 0 && minModifier < 1){
                                             modifier = minModifier;
-                                            emit forwardInfoToMainWindow("Computed speed is lower than min machine speed, machine min speed will be used");
                                         }
 
                                         if(modifier > 0 && modifier < 1) {
@@ -479,7 +478,6 @@ namespace ORNL
 
                                         if(modifier > maxModifier && maxModifier > 1){
                                             modifier = maxModifier;
-                                            emit forwardInfoToMainWindow("Computed speed exceeds max machine speed, machine max speed will be used");
                                         }
 
                                         if(modifier > 1) {
@@ -2258,10 +2256,6 @@ namespace ORNL
             m_layer_FR_modifiers[m_current_layer] = modifier;
 
             // Log the adjustment for debugging
-            emit forwardInfoToMainWindow("Adjusting feedrate for layer " +
-                                         QString::number(m_current_layer) +
-                                         " with modifier: " +
-                                         QString::number(modifier, 'f', 4));
 
             QList<GcodeCommand>::iterator current_layer_motion_end =
                 m_motion_commands[m_current_layer].end();
@@ -2368,10 +2362,6 @@ namespace ORNL
 
                 --current_layer_motion_end;
             }
-
-            // Log how many commands were modified
-            emit forwardInfoToMainWindow("Modified " + QString::number(modifiedCommands) +
-                                         " commands in layer " + QString::number(m_current_layer));
         }
     }
 
